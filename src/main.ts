@@ -123,7 +123,7 @@ class editorPlugin implements PluginValue {
 							if (currentNode?.name.contains("atom")) {
 								frontmatterName = view.state.sliceDoc(
 									currentNode.from,
-									currentNode.to,
+									currentNode.to
 								);
 								break;
 							}
@@ -167,18 +167,23 @@ class editorPlugin implements PluginValue {
 }
 
 // Rerender Property by changing the text directly
-const rerenderProperty = () => {
+const rerenderProperty = (tagSelectors: string[] = []) => {
 	document
 		.querySelectorAll(
-			`[data-property-key="tags"] .multi-select-pill-content span:not(.${BASETAG})`,
+			[
+				'[data-property-key="tags"] .multi-select-pill-content span',
+				...(tagSelectors || []),
+			]
+				.map((s) => `${s}:not(.${BASETAG})`)
+				.join(", ")
 		)
 		.forEach((node: HTMLSpanElement) => {
 			const text = node.textContent ?? "";
 			node.textContent = text.slice(text.lastIndexOf("/") + 1);
-			node.className = BASETAG;
+			node.classList.add(BASETAG);
 			node.dataset.tag = text;
 		});
-}
+};
 
 export default class TagRenderer extends Plugin {
 	public settings: SettingParams = DEFAULT_SETTING;
@@ -211,13 +216,15 @@ export default class TagRenderer extends Plugin {
 			);
 		});
 
+		const onRerenderPropery = () =>
+			rerenderProperty(this.settings.tagSelectors);
 		// Rerender property by changing the text directly
 		this.registerEvent(
-			this.app.workspace.on("layout-change", rerenderProperty)
+			this.app.workspace.on("layout-change", onRerenderPropery)
 		);
 
 		this.registerEvent(
-			this.app.workspace.on("file-open", rerenderProperty)
+			this.app.workspace.on("file-open", onRerenderPropery)
 		);
 
 		this.addSettingTab(new SettingTab(this.app, this));
@@ -232,10 +239,12 @@ export default class TagRenderer extends Plugin {
 
 interface SettingParams {
 	renderOnEditor: boolean;
+	tagSelectors: string[];
 }
 
 const DEFAULT_SETTING: SettingParams = {
 	renderOnEditor: true,
+	tagSelectors: [],
 };
 
 class SettingTab extends PluginSettingTab {
@@ -248,14 +257,26 @@ class SettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		const editorSetting = new Setting(containerEl);
-		editorSetting
+		new Setting(containerEl)
 			.setName("Render on Editor")
 			.setDesc("Render basetags also on editor.")
 			.addToggle((toggle) => {
 				toggle.setValue(setting.renderOnEditor);
 				toggle.onChange(async (value) => {
 					setting.renderOnEditor = value;
+					await this.plugin.saveSettings();
+				});
+			});
+
+		new Setting(containerEl)
+			.setName("Tag Selector")
+			.setDesc(
+				"Additional selectors to custom tag containers (separate by comma)"
+			)
+			.addText((text) => {
+				text.setValue(setting.tagSelectors.join(","));
+				text.onChange(async (value) => {
+					setting.tagSelectors = value.split(",");
 					await this.plugin.saveSettings();
 				});
 			});
